@@ -337,7 +337,7 @@ document.getElementById("data").value=new Date().toISOString().split("T")[0];
   const pn=document.getElementById("projnum"); if(pn) pn.value="";
 
 // ── CHANGELOG ─────────────────────────────────────────────────────────────
-const CL={"v1.0-iOS":["Baseado no Android v3.7 — todas as funcionalidades migradas","Download via FileReader + dataURL (Safari)","Compressao STORE (evita travamento Safari)","Camera sem capture (picker nativo iOS)","Email via window.location.href (lista de clientes Safari)","Compartilhar PDF via Web Share API nativa iOS","Campo Projeto Nº","DATA DA INSPEÇÃO linha unica","PDF identico ao Excel","Sincronizacao Fiscal e TST","Copyright Rafael Cavalcanti Moreira MAI 2026"]};
+const CL={"v1.0-iOS":["Baseado no Android v3.7 com adaptacoes para iPhone e Safari","Download via FileReader + dataURL","Compressao STORE (evita travamento Safari)","Camera sem capture — picker nativo iOS","Email via window.location.href","PDF via FileReader","Compartilhar via Web Share API nativa"]};
 function abrirChangelog(){
   const c=document.getElementById("cl-content"); c.innerHTML="";
   for(const[v,items] of Object.entries(CL)){
@@ -731,9 +731,8 @@ function abrirEmail(){
     "Nº: "+nrelDisplay+"\nData: "+dataBR+"\nLocal: "+gv("local")+"\nEmpresa: "+gv("emp")+
     "\n\nArquivo: "+fname+"\n(Disponível na pasta Downloads do dispositivo)\n\nAtenciosamente."
   );
-  const mailtoURL="mailto:"+emails+"?subject="+sub+"&body="+bod;
-  // iOS Safari: window.location.href abre lista de clientes de email
-  window.location.href=mailtoURL;
+  // iOS: window.location.href abre lista de clientes de email no Safari
+  window.location.href="mailto:"+emails+"?subject="+sub+"&body="+bod;
   note.style.color="#16a34a";
   note.textContent="✓ Cliente de e-mail aberto. Anexe o arquivo de Arquivos.";
 }
@@ -795,14 +794,14 @@ function compartilharPDF(){
     } else {
       // Navegador sem suporte: baixar o PDF diretamente
       // iOS fallback: FileReader dataURL
-      const fr=new FileReader();
-      fr.onload=function(){
-        const a=document.createElement("a"); a.href=fr.result;
-        a.download=pdfFname; a.target="_blank"; a.style.display="none";
+      const frShare=new FileReader();
+      frShare.onload=function(){
+        const a=document.createElement('a'); a.href=frShare.result;
+        a.download=pdfFname; a.target='_blank'; a.style.display='none';
         document.body.appendChild(a); a.click();
         setTimeout(()=>document.body.removeChild(a),500);
       };
-      fr.readAsDataURL(pdfBlob);
+      frShare.readAsDataURL(pdfBlob);
       note.style.color="#16a34a"; note.textContent="✓ PDF aberto. Toque em Compartilhar → Salvar em Arquivos.";
     }
   });
@@ -1165,18 +1164,18 @@ async function gerarPDF(){
     ySig=labelRow(ySig,5,[{text:"FISCAL DE CAMPO",w:w3},{text:"SEGURANÇA DO TRABALHO",w:w3},{text:"COORDENADOR DE OBRA",w:w3}]);
     valueRow(ySig,8,[{text:gv("fcampo"),w:w3},{text:gv("st"),w:w3},{text:gv("coord"),w:w3}]);
 
-    lastPdfBlob=doc.output('blob');
     // iOS: FileReader para download do PDF
-    const pdfB=doc.output("blob");
-    lastPdfBlob=pdfB;
-    const frPDF=new FileReader();
-    frPDF.onload=function(){
-      const a=document.createElement("a"); a.href=frPDF.result;
-      a.download=pdfFname; a.target="_blank"; a.style.display="none";
-      document.body.appendChild(a); a.click();
-      setTimeout(()=>document.body.removeChild(a),500);
-    };
-    frPDF.readAsDataURL(pdfB);
+    lastPdfBlob=doc.output('blob');
+    await new Promise(resolve=>{
+      const frPDF=new FileReader();
+      frPDF.onload=function(){
+        const a=document.createElement('a'); a.href=frPDF.result;
+        a.download=pdfFname; a.target='_blank'; a.style.display='none';
+        document.body.appendChild(a); a.click();
+        setTimeout(()=>{document.body.removeChild(a);resolve();},500);
+      };
+      frPDF.readAsDataURL(lastPdfBlob);
+    });
 
     setLoad(false);
     pbtn.className="gbtn ok"; pbtn.textContent="✓ PDF salvo: "+pdfFname;
@@ -1252,21 +1251,23 @@ async function gerarExcel(){
     }catch(e){ console.warn("Aba não renomeada:",e); }
 
     lastBlob=null; // será definido abaixo
-    const blob=await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",compression:"STORE"  // iOS Safari: STORE evita travamento});
+    const blob=await zip.generateAsync({type:"blob",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",compression:"STORE"});
     lastBlob=blob;
     const seq=String(parseInt(document.getElementById("nrel").dataset.seq||"2")).padStart(3,"0");
     lastFname=`TNE-RIA-${seq}-AMT.xlsx`;
     lastNrel=`TNE - RIA-${seq} / AMT`; lastSeqNum=seq;
-    // Download iOS: FileReader converte para dataURL — mais confiável no Safari
-    const reader=new FileReader();
-    reader.onload=function(){
-      const a=document.createElement("a");
-      a.href=reader.result; a.download=lastFname;
-      a.target="_blank"; a.style.display="none";
-      document.body.appendChild(a); a.click();
-      setTimeout(()=>document.body.removeChild(a),500);
-    };
-    reader.readAsDataURL(blob);
+    // Download iOS: FileReader + dataURL — mais confiável no Safari
+    await new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=function(){
+        const a=document.createElement("a");
+        a.href=reader.result; a.download=lastFname;
+        a.target="_blank"; a.style.display="none";
+        document.body.appendChild(a); a.click();
+        setTimeout(()=>{document.body.removeChild(a);resolve();},500);
+      };
+      reader.readAsDataURL(blob);
+    });
 
     await incrementarContador();
     setLoad(false);
